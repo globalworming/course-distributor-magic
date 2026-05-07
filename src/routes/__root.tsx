@@ -8,6 +8,7 @@ import {
   Scripts,
 } from "@tanstack/react-router";
 
+import { getAppBasePath } from "../lib/base-path";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
@@ -35,6 +36,7 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const appBasePath = getAppBasePath();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -56,7 +58,7 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             Try again
           </button>
           <a
-            href="/"
+            href={appBasePath}
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
             Go home
