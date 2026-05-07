@@ -1,24 +1,29 @@
-- roomXperiod needs no capacity override. so index and row based csv mapping rooms and courses should be viable
-  - derive slot capacity from course.defaultCapacity during schedule import
-  - expand `src/templates/courses.csv` to 20 example courses with max 20 places each
-  - extend `src/templates/schedule.csv` to cover the whole week with headers like `"Mo 1"` ... `"Fr 5"`
-  - make the weekly schedule repeat some courses across different periods so defaults reflect real reuse
-- unit test distribution logic
-  - required courses should be placed before optional preferences
-  - no slot should exceed capacity
-  - unmet required courses should be reported when no feasible slot exists
-  - loads should stay stable when multiple participants compete for the same required course
-  - add direct tests for distribution.ts instead of relying only on playwright
-  - participants should be assigned to a given course at most once across the whole schedule
-  - every participant should be placed into some course in every period whenever any feasible slot exists
-  - participant distribution should stay as even as possible across rooms when multiple choices are equivalent
-- rules and distribution notes in UI
-  - display the key assignment constraints near rules/distribution: no duplicate course per participant, everyone should always be in a course, and balancing across rooms is preferred when feasible
-  - implement the above constraints in `distribution.ts` and keep the UI copy aligned with actual behavior
-- csv import validation
-  - reject duplicate course names because rules csv already depends on unique names
-  - ensure schedule/rules import errors are surfaced in the UI without partial state writes
-  - cover csv round-trip for schedule data in playwright
-- state cleanup after csv-first flow lands
-  - revisit seeded demo data and localStorage bootstrapping
-  - consider a reset-to-template action instead of in-browser manual editing
+- status: completed
+
+- csv-first workflow is implemented
+  - browser UI is read-only for data preview plus import/export/distribute actions
+  - participants, courses, rooms, rules, and schedule all bootstrap from source CSV templates
+  - reset-to-template replaces manual in-browser editing
+
+- schedule and template work is implemented
+  - schedule capacity is derived from `course.defaultCapacity`
+  - `src/templates/courses.csv` contains 20 example courses capped at 20 places
+  - `src/templates/schedule.csv` covers the full week with `Mo 1` ... `Fr 5`
+  - the default weekly schedule repeats courses across different periods
+
+- distribution behavior is implemented
+  - required courses are prioritized ahead of optional preferences
+  - slot capacity is respected
+  - unmet required courses are reported when no feasible slot exists
+  - participants avoid repeating the same course when another feasible course exists
+  - repeated courses are only used as a fallback to avoid leaving a participant unassigned
+  - room loads are balanced when choices are otherwise equivalent
+
+- validation and tests are implemented
+  - duplicate course names are rejected
+  - schedule and rules import failures do not partially write state
+  - schedule CSV round-trip is covered in Playwright
+  - distribution logic is covered by direct unit tests
+
+- ui notes are implemented
+  - rules and distribution sections describe the active assignment constraints shown in the app
