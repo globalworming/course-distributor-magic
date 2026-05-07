@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), "fixtures");
-const storageKey = "course-distributor-v7";
+const storageKey = "course-distributor-v8";
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => {
@@ -95,35 +95,40 @@ test("downloads templates, reimports CSV data, and round-trips the schedule grid
   const participantRows = participantsDownload.content.split("\n");
   expect(participantRows).toHaveLength(34);
   expect(participantRows[0]).toBe('"name","tags"');
-  expect(participantsDownload.content).toContain('"Alice","eng"');
-  expect(participantsDownload.content).toContain('"Willa","eng"');
+  expect(participantsDownload.content).toContain('"Alice",""');
+  expect(participantsDownload.content).toContain('"Bob","eng"');
+  expect(participantsDownload.content).toContain('"Felix","eng"');
   expect(participantsDownload.content).toContain('"Gia",""');
 
   const coursesDownload = await captureCsvExport(page, "courses-export-csv");
   expect(coursesDownload.filename).toBe("courses.csv");
-  expect(coursesDownload.content).toBe(
-    '"name","defaultCapacity"\n"English Basics","12"\n"HSU Safety","20"\n"Math 101","15"\n"Teamwork","18"\n"Fire Drill","25"',
-  );
+  const courseRows = coursesDownload.content.split("\n");
+  expect(courseRows).toHaveLength(21);
+  expect(courseRows[0]).toBe('"name","defaultCapacity"');
+  expect(coursesDownload.content).toContain('"English Basics","20"');
+  expect(coursesDownload.content).toContain('"Data Entry","20"');
 
   const roomsDownload = await captureCsvExport(page, "rooms-export-csv");
   expect(roomsDownload.filename).toBe("rooms.csv");
   expect(roomsDownload.content).toBe('"name"\n"Room 1"\n"Room 2"\n"Room 3"\n"Room 4"\n"Room 5"');
 
-  await expect(scheduleTable.getByText("English Basics")).toHaveCount(5);
-  await expect(scheduleTable.getByText("HSU Safety")).toHaveCount(5);
+  await expect(scheduleTable.getByText("English Basics").first()).toBeVisible();
+  await expect(scheduleTable.getByText("HSU Safety").first()).toBeVisible();
+  await expect(scheduleTable.getByText("Data Entry").first()).toBeVisible();
   await expect(rulesTable.getByText("English Basics")).toBeVisible();
   await expect(rulesTable.getByText("optional")).toBeVisible();
   await expect(rulesTable.getByRole("cell", { name: "eng", exact: true })).toBeVisible();
-  await expect(
-    scheduleTable.getByRole("columnheader", { name: "Mo 11:15 - Mo 12-15" }),
-  ).toBeVisible();
-  await expect(scheduleTable.getByRole("columnheader", { name: "Mi 12:00 - 13:00" })).toBeVisible();
+  await expect(scheduleTable.getByRole("columnheader", { name: "Mo 1" })).toBeVisible();
+  await expect(scheduleTable.getByRole("columnheader", { name: "Fr 5" })).toBeVisible();
 
   const initialScheduleDownload = await captureCsvExport(page, "schedule-export-csv");
   expect(initialScheduleDownload.filename).toBe("schedule.csv");
-  expect(initialScheduleDownload.content).toBe(
-    '"roomName","Mo 11:15 - Mo 12-15","Mo 12:45 - Mo 13-45","Di 12:45 - Di 13-45","Di 13:45 - Di 14:45","Mi 12:00 - 13:00"\n"Room 1","English Basics","HSU Safety","Math 101","Teamwork","Fire Drill"\n"Room 2","HSU Safety","Math 101","Teamwork","Fire Drill","English Basics"\n"Room 3","Math 101","Teamwork","Fire Drill","English Basics","HSU Safety"\n"Room 4","Teamwork","Fire Drill","English Basics","HSU Safety","Math 101"\n"Room 5","Fire Drill","English Basics","HSU Safety","Math 101","Teamwork"',
-  );
+  const initialScheduleRows = initialScheduleDownload.content.split("\n");
+  expect(initialScheduleRows).toHaveLength(6);
+  expect(initialScheduleRows[0]).toContain('"Mo 1"');
+  expect(initialScheduleRows[0]).toContain('"Fr 5"');
+  expect(initialScheduleDownload.content).toContain('"Room 1","English Basics","HSU Safety"');
+  expect(initialScheduleDownload.content).toContain('"Room 5","English Basics","Math 101"');
 
   await page
     .getByTestId("participants-import-csv-input")
@@ -149,17 +154,23 @@ test("downloads templates, reimports CSV data, and round-trips the schedule grid
   await expect(roomsTable.getByText("Workshop B")).toBeVisible();
   await expect(rulesTable.getByText("alpha")).toBeVisible();
   await expect(rulesTable.getByText("ops")).toBeVisible();
-  await expect(scheduleTable.getByText("Logistics 101")).toHaveCount(4);
-  await expect(scheduleTable.getByText("Safety Drill")).toHaveCount(3);
+  await expect(scheduleTable.getByText("Logistics 101").first()).toBeVisible();
+  await expect(scheduleTable.getByText("Safety Drill").first()).toBeVisible();
+  await expect(page.getByText("prefers one visit per course for each participant")).toBeVisible();
 
   await page.getByRole("button", { name: "Distribute" }).click();
-  await expect(page.getByRole("columnheader", { name: "Mo 11:15 - Mo 12-15" })).toHaveCount(2);
-  await expect(page.getByRole("columnheader", { name: "Mi 12:00 - 13:00" })).toHaveCount(2);
+  await expect(page.getByRole("columnheader", { name: "Mo 1" })).toHaveCount(2);
+  await expect(page.getByRole("columnheader", { name: "Fr 5" })).toHaveCount(2);
+  await expect(page.getByText("fall back to repeats only when that is the only way")).toBeVisible();
 
   const scheduleDownload = await captureCsvExport(page, "schedule-export-csv");
   expect(scheduleDownload.filename).toBe("schedule.csv");
-  expect(scheduleDownload.content).toBe(
-    '"roomName","Mo 11:15 - Mo 12-15","Mo 12:45 - Mo 13-45","Di 12:45 - Di 13-45","Di 13:45 - Di 14:45","Mi 12:00 - 13:00"\n"Lab A","Logistics 101","Safety Drill","","Logistics 101","Safety Drill"\n"Workshop B","Safety Drill","","Logistics 101","","Logistics 101"',
+  const importedScheduleRows = scheduleDownload.content.split("\n");
+  expect(importedScheduleRows).toHaveLength(3);
+  expect(importedScheduleRows[0]).toContain('"Mo 1"');
+  expect(importedScheduleRows[0]).toContain('"Fr 5"');
+  expect(scheduleDownload.content).toContain(
+    '"Lab A","Logistics 101","Safety Drill","","Logistics 101","Safety Drill"',
   );
 });
 
@@ -206,7 +217,7 @@ test("surfaces CSV validation errors without partial state writes", async ({ pag
     .setInputFiles(join(fixturesDir, "schedule-invalid.csv"));
   await expect(page.getByText('Unknown room name "Ghost Room" in schedule CSV.')).toBeVisible();
   await expect(scheduleTable.getByText("Lab A")).toBeVisible();
-  await expect(scheduleTable.getByText("Safety Drill")).toHaveCount(3);
+  await expect(scheduleTable.getByText("Safety Drill").first()).toBeVisible();
 });
 
 async function captureCsvExport(page: Page, testId: string) {

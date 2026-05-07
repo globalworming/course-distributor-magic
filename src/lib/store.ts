@@ -14,8 +14,8 @@ import roomsTemplate from "../templates/rooms.csv?raw";
 import rulesTemplate from "../templates/rules.csv?raw";
 import scheduleTemplate from "../templates/schedule.csv?raw";
 
-const KEY = "course-distributor-v7";
-export const PERIODS = 5;
+const KEY = "course-distributor-v8";
+export const PERIODS = 25;
 
 export type AppState = {
   participants: Participant[];

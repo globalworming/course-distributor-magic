@@ -578,6 +578,11 @@ function Index() {
         </DataCard>
 
         <DataCard title="Rules" error={csvErrors.rules}>
+          <div className="mb-3 text-sm text-muted-foreground">
+            Rules guide the distributor. It prefers one visit per course for each participant, keeps
+            everyone in an available course every period, and balances room loads when options are
+            otherwise equivalent.
+          </div>
           <ReadonlyTable
             rows={ruleRows}
             columns={ruleColumns}
@@ -600,6 +605,11 @@ function Index() {
               <CardTitle className="text-base">Distribution</CardTitle>
             </CardHeader>
             <CardContent>
+              <div className="mb-3 text-sm text-muted-foreground">
+                Assignments prioritize required rules first, avoid repeating courses when possible,
+                and fall back to repeats only when that is the only way to keep a participant
+                placed.
+              </div>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
                   <thead>

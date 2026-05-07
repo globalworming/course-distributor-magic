@@ -29,6 +29,7 @@ export function distribute(
   rules: Rule[],
   periods: number,
 ): { assignments: Assignment[]; loads: Map<string, number> } {
+  void courses;
   const requiredByTag = new Map<string, Set<string>>();
   const optionalByTag = new Map<string, Set<string>>();
   for (const r of rules) {
@@ -44,6 +45,8 @@ export function distribute(
   }
 
   const loads = new Map<string, number>(slots.map((s) => [s.id, 0]));
+  const roomLoads = new Map<string, number>(rooms.map((room) => [room.id, 0]));
+  const slotById = new Map(slots.map((slot) => [slot.id, slot]));
 
   // Order participants: more required courses first
   const ordered = [...participants].sort((a, b) => {
@@ -57,39 +60,23 @@ export function distribute(
   for (const p of ordered) {
     const required = collectCourses(p, requiredByTag);
     const optional = collectCourses(p, optionalByTag);
-
-    // Backtracking: choose one slot per period, ensuring all required courses covered
     const perPeriod: (string | null)[] = new Array(periods).fill(null);
-    const coveredCourses = new Set<string>();
-
-    // Helper: candidate slots in a period, scored
-    const candidates = (period: number): Slot[] => {
-      const list = slotsByPeriod[period].filter((s) => (loads.get(s.id) ?? 0) < s.capacity);
-      return list.sort((a, b) => score(b, p) - score(a, p));
-      function score(s: Slot, _p: Participant): number {
-        const cid = s.courseId!;
-        let sc = 0;
-        if (required.has(cid) && !coveredCourses.has(cid)) sc += 10000;
-        else if (optional.has(cid)) sc += 100;
-        // load balance: prefer less full
-        sc += (s.capacity - (loads.get(s.id) ?? 0)) * 0.1;
-        return sc;
-      }
-    };
-
-    // Greedy with required-first pass
-    // 1) Try to place each uncovered required course into some period
-    const periodOrder = [...Array(periods).keys()];
+    const assignedCourses = new Set<string>();
     const requiredList = [...required];
-    // For each required course find feasible periods sorted by least flexibility
-    const findPeriodsFor = (cid: string) =>
-      periodOrder.filter(
-        (pe) =>
-          perPeriod[pe] === null &&
-          slotsByPeriod[pe].some((s) => s.courseId === cid && (loads.get(s.id) ?? 0) < s.capacity),
+    const periodLabels = Array.from({ length: periods }, (_, index) => `Period ${index + 1}`);
+
+    const findPeriodsFor = (courseId: string) =>
+      [...Array(periods).keys()].filter(
+        (period) =>
+          perPeriod[period] === null &&
+          slotsByPeriod[period].some(
+            (slot) =>
+              slot.courseId === courseId &&
+              (loads.get(slot.id) ?? 0) < slot.capacity &&
+              !assignedCourses.has(courseId),
+          ),
       );
 
-    // Sort required by fewest options
     requiredList.sort((a, b) => findPeriodsFor(a).length - findPeriodsFor(b).length);
 
     const unmet: string[] = [];
@@ -99,44 +86,69 @@ export function distribute(
         unmet.push(cid);
         continue;
       }
-      // pick period with most overall load pressure resolved: simplest = first option
-      // but prefer the slot with most remaining capacity to balance
-      let bestPeriod = opts[0];
-      let bestSlot: Slot | null = null;
-      let bestScore = -Infinity;
-      for (const pe of opts) {
-        for (const s of slotsByPeriod[pe]) {
-          if (s.courseId !== cid) continue;
-          const remaining = s.capacity - (loads.get(s.id) ?? 0);
-          if (remaining <= 0) continue;
-          if (remaining > bestScore) {
-            bestScore = remaining;
-            bestPeriod = pe;
-            bestSlot = s;
-          }
-        }
-      }
-      if (bestSlot) {
-        perPeriod[bestPeriod] = bestSlot.id;
-        loads.set(bestSlot.id, (loads.get(bestSlot.id) ?? 0) + 1);
-        coveredCourses.add(cid);
-      } else {
+      const best = chooseCandidateSlot(
+        p,
+        opts,
+        slotsByPeriod,
+        loads,
+        roomLoads,
+        required,
+        optional,
+        assignedCourses,
+        false,
+      );
+      if (!best) {
         unmet.push(cid);
-      }
-    }
-
-    // 2) Fill remaining periods with optional > any
-    const notes: string[] = [];
-    for (let pe = 0; pe < periods; pe++) {
-      if (perPeriod[pe] !== null) continue;
-      const cands = candidates(pe);
-      if (cands.length === 0) {
-        notes.push(`Period ${pe + 1}: no available slot`);
         continue;
       }
-      const chosen = cands[0];
-      perPeriod[pe] = chosen.id;
-      loads.set(chosen.id, (loads.get(chosen.id) ?? 0) + 1);
+
+      assignToPeriod(best.period, best.slot, perPeriod, loads, roomLoads, assignedCourses);
+    }
+
+    const notes: string[] = [];
+    for (let period = 0; period < periods; period += 1) {
+      if (perPeriod[period] !== null) continue;
+
+      const uniqueChoice = chooseCandidateSlot(
+        p,
+        [period],
+        slotsByPeriod,
+        loads,
+        roomLoads,
+        required,
+        optional,
+        assignedCourses,
+        false,
+      );
+
+      if (uniqueChoice) {
+        assignToPeriod(period, uniqueChoice.slot, perPeriod, loads, roomLoads, assignedCourses);
+        continue;
+      }
+
+      const fallbackChoice = chooseCandidateSlot(
+        p,
+        [period],
+        slotsByPeriod,
+        loads,
+        roomLoads,
+        required,
+        optional,
+        assignedCourses,
+        true,
+      );
+
+      if (!fallbackChoice) {
+        notes.push(`${periodLabels[period]}: no available slot`);
+        continue;
+      }
+
+      assignToPeriod(period, fallbackChoice.slot, perPeriod, loads, roomLoads, assignedCourses);
+      const repeatedCourseId = fallbackChoice.slot.courseId;
+      const repeatedSlot = repeatedCourseId ? slotById.get(fallbackChoice.slot.id) : null;
+      if (repeatedSlot?.courseId) {
+        notes.push(`${periodLabels[period]}: repeated course to avoid an empty assignment`);
+      }
     }
 
     assignments.push({
@@ -148,6 +160,69 @@ export function distribute(
   }
 
   return { assignments, loads };
+}
+
+function chooseCandidateSlot(
+  participant: Participant,
+  periods: number[],
+  slotsByPeriod: Slot[][],
+  loads: Map<string, number>,
+  roomLoads: Map<string, number>,
+  required: Set<string>,
+  optional: Set<string>,
+  assignedCourses: Set<string>,
+  allowRepeats: boolean,
+): { period: number; slot: Slot } | null {
+  const candidates: Array<{ period: number; slot: Slot }> = [];
+
+  for (const period of periods) {
+    for (const slot of slotsByPeriod[period]) {
+      if ((loads.get(slot.id) ?? 0) >= slot.capacity) continue;
+      if (!slot.courseId) continue;
+      if (!allowRepeats && assignedCourses.has(slot.courseId)) continue;
+      candidates.push({ period, slot });
+    }
+  }
+
+  candidates.sort((a, b) => scoreSlot(b.slot, b.period) - scoreSlot(a.slot, a.period));
+  return candidates[0] ?? null;
+
+  function scoreSlot(slot: Slot, period: number) {
+    const courseId = slot.courseId!;
+    const slotLoad = loads.get(slot.id) ?? 0;
+    const roomLoad = roomLoads.get(slot.roomId) ?? 0;
+    const roomPeriodLoad = slotsByPeriod[period].reduce((sum, candidate) => {
+      if (candidate.roomId !== slot.roomId) return sum;
+      return sum + (loads.get(candidate.id) ?? 0);
+    }, 0);
+    let score = 0;
+
+    if (required.has(courseId) && !assignedCourses.has(courseId)) score += 10000;
+    else if (optional.has(courseId) && !assignedCourses.has(courseId)) score += 1000;
+    else if (!assignedCourses.has(courseId)) score += 100;
+    else if (optional.has(courseId)) score += 20;
+
+    score += slot.capacity - slotLoad;
+    score -= roomLoad * 0.5;
+    score -= roomPeriodLoad * 0.25;
+    return score;
+  }
+}
+
+function assignToPeriod(
+  period: number,
+  slot: Slot,
+  perPeriod: (string | null)[],
+  loads: Map<string, number>,
+  roomLoads: Map<string, number>,
+  assignedCourses: Set<string>,
+) {
+  perPeriod[period] = slot.id;
+  loads.set(slot.id, (loads.get(slot.id) ?? 0) + 1);
+  roomLoads.set(slot.roomId, (roomLoads.get(slot.roomId) ?? 0) + 1);
+  if (slot.courseId) {
+    assignedCourses.add(slot.courseId);
+  }
 }
 
 function collectCourses(p: Participant, byTag: Map<string, Set<string>>): Set<string> {
