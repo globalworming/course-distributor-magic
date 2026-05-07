@@ -128,7 +128,7 @@ test("downloads templates, reimports CSV data, and round-trips the schedule grid
   expect(initialScheduleRows[0]).toContain('"Mo 1"');
   expect(initialScheduleRows[0]).toContain('"Fr 5"');
   expect(initialScheduleDownload.content).toContain('"Room 1","English Basics","HSU Safety"');
-  expect(initialScheduleDownload.content).toContain('"Room 5","English Basics","Math 101"');
+  expect(initialScheduleDownload.content).toContain('"Room 5","First Aid","Math 101"');
 
   await page
     .getByTestId("participants-import-csv-input")

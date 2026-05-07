@@ -1,15 +1,15 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-This app is a TanStack Start + React + TypeScript project. Keep application code in `src/`:
+This app is a Vite + React + TypeScript project. Keep application code in `src/`:
 
-- `src/routes/` contains file-based routes; `index.tsx` is the main screen.
+- `src/App.tsx` is the main screen and `src/main.tsx` is the SPA entrypoint.
 - `src/components/` contains reusable UI, with low-level primitives in `src/components/ui/`.
 - `src/lib/` holds domain logic such as CSV parsing, scheduling, and local state persistence.
 - `src/hooks/` contains shared React hooks.
 - `tests/` contains Playwright end-to-end specs, with CSV fixtures in `tests/fixtures/`.
 
-Generated output lives in `dist/`. Do not hand-edit `src/routeTree.gen.ts`; TanStack Router regenerates it.
+Generated output lives in `dist/`.
 
 ## Build, Test, and Development Commands
 - `npm run dev` starts the local dev server with Vite.

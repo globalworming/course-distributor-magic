@@ -1,5 +1,4 @@
 import { type ReactNode, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
 import { AlertCircle, Download, RotateCcw, Wand2 } from "lucide-react";
 import { ReadonlyTable, type ReadonlyColumn } from "@/components/ReadonlyTable";
 import { TableCsvActions } from "@/components/TableCsvActions";
@@ -24,24 +23,10 @@ import {
 import { distribute, type Course, type Room, type Slot } from "@/lib/distribution";
 import { createTemplateState, PERIODS, type AppState, uid, useAppState } from "@/lib/store";
 
-export const Route = createFileRoute("/")({
-  component: Index,
-  head: () => ({
-    meta: [
-      { title: "Course Distributor — assign participants to room×period grid" },
-      {
-        name: "description",
-        content:
-          "Import participants, courses, rooms, schedule, and rules via CSV, then assign participants to one course per period.",
-      },
-    ],
-  }),
-});
-
 type CsvTableKey = "participants" | "courses" | "rooms" | "schedule" | "rules";
 type CsvErrors = Partial<Record<CsvTableKey, string>>;
 
-function Index() {
+export default function App() {
   const [state, setState] = useAppState();
   const { participants, courses, rooms, slots, rules, schedulePeriodLabels } = state;
   const [csvErrors, setCsvErrors] = useState<CsvErrors>({});
