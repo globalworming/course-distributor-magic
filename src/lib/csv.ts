@@ -15,6 +15,14 @@ export type RuleCsvRow = {
   type: RuleType;
   tag: string;
 };
+export type ScheduleCsvRow = {
+  roomName: string;
+  courseNames: string[];
+};
+export type ScheduleCsvData = {
+  periodLabels: string[];
+  rows: ScheduleCsvRow[];
+};
 
 const PARTICIPANT_HEADERS = ["name", "tags"] as const;
 const COURSE_HEADERS = ["name", "defaultCapacity"] as const;
@@ -77,6 +85,53 @@ export function parseRulesCsv(text: string): RuleCsvRow[] {
     type: parseRuleType(type, index + 2),
     tag: tag.trim() || "all",
   }));
+}
+
+export function exportScheduleCsv(rows: ScheduleCsvRow[], periodLabels: string[]) {
+  return toCsv([
+    ["roomName", ...periodLabels],
+    ...rows.map((row) => [row.roomName, ...row.courseNames]),
+  ]);
+}
+
+export function parseScheduleCsv(text: string, periods: number): ScheduleCsvData {
+  const rows = parseCsv(text);
+  if (rows.length === 0) {
+    throw new CsvError("CSV is empty.");
+  }
+
+  const [headerRow, ...dataRows] = rows;
+  if (headerRow.length !== periods + 1) {
+    throw new CsvError(`Expected ${periods + 1} schedule columns but found ${headerRow.length}.`);
+  }
+
+  if (normalizeHeader(headerRow[0]) !== "roomname") {
+    throw new CsvError('Schedule CSV must start with a "roomName" column.');
+  }
+
+  const periodLabels = headerRow.slice(1).map((header) => header.trim());
+  if (periodLabels.some((label) => !label)) {
+    throw new CsvError("Schedule CSV period headers must not be empty.");
+  }
+
+  return {
+    periodLabels,
+    rows: dataRows
+      .filter((row) => row.some((cell) => cell.trim() !== ""))
+      .map((row, index) => {
+        if (row.length !== periods + 1) {
+          throw new CsvError(
+            `Row ${index + 2}: expected ${periods + 1} columns but found ${row.length}.`,
+          );
+        }
+
+        const [roomName, ...courseNames] = row;
+        return {
+          roomName: roomName.trim(),
+          courseNames: courseNames.map((courseName) => courseName.trim()),
+        };
+      }),
+  };
 }
 
 function parseTags(value: string) {

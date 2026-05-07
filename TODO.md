@@ -1,5 +1,24 @@
-- interactions will be csv driven, browser gui is only for display and triggering generation. 
-  - much less interactive forms, also better for performance
-  - default data shown can be used as template to download, then edited locally, then uploaded. 
-  - remove interactive data entry
 - roomXperiod needs no capacity override. so index and row based csv mapping rooms and courses should be viable
+  - derive slot capacity from course.defaultCapacity during schedule import
+  - expand `src/templates/courses.csv` to 20 example courses with max 20 places each
+  - extend `src/templates/schedule.csv` to cover the whole week with headers like `"Mo 1"` ... `"Fr 5"`
+  - make the weekly schedule repeat some courses across different periods so defaults reflect real reuse
+- unit test distribution logic
+  - required courses should be placed before optional preferences
+  - no slot should exceed capacity
+  - unmet required courses should be reported when no feasible slot exists
+  - loads should stay stable when multiple participants compete for the same required course
+  - add direct tests for distribution.ts instead of relying only on playwright
+  - participants should be assigned to a given course at most once across the whole schedule
+  - every participant should be placed into some course in every period whenever any feasible slot exists
+  - participant distribution should stay as even as possible across rooms when multiple choices are equivalent
+- rules and distribution notes in UI
+  - display the key assignment constraints near rules/distribution: no duplicate course per participant, everyone should always be in a course, and balancing across rooms is preferred when feasible
+  - implement the above constraints in `distribution.ts` and keep the UI copy aligned with actual behavior
+- csv import validation
+  - reject duplicate course names because rules csv already depends on unique names
+  - ensure schedule/rules import errors are surfaced in the UI without partial state writes
+  - cover csv round-trip for schedule data in playwright
+- state cleanup after csv-first flow lands
+  - revisit seeded demo data and localStorage bootstrapping
+  - consider a reset-to-template action instead of in-browser manual editing

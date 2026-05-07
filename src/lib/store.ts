@@ -1,81 +1,124 @@
 import { useEffect, useState } from "react";
+import {
+  CsvError,
+  parseCoursesCsv,
+  parseParticipantsCsv,
+  parseRoomsCsv,
+  parseRulesCsv,
+  parseScheduleCsv,
+} from "./csv";
 import type { Participant, Course, Room, Rule, Slot } from "./distribution";
+import coursesTemplate from "../templates/courses.csv?raw";
+import participantsTemplate from "../templates/participants.csv?raw";
+import roomsTemplate from "../templates/rooms.csv?raw";
+import rulesTemplate from "../templates/rules.csv?raw";
+import scheduleTemplate from "../templates/schedule.csv?raw";
 
-const KEY = "course-distributor-v2";
+const KEY = "course-distributor-v7";
 export const PERIODS = 5;
 
 export type AppState = {
   participants: Participant[];
   courses: Course[];
   rooms: Room[];
-  slots: Slot[]; // length rooms*PERIODS, one per cell
+  slots: Slot[];
   rules: Rule[];
+  schedulePeriodLabels: string[];
 };
 
 const uid = () => Math.random().toString(36).slice(2, 10);
 
-const seed = (): AppState => {
-  const cEng = { id: uid(), name: "English Basics", defaultCapacity: 12 };
-  const cHsu = { id: uid(), name: "HSU Safety", defaultCapacity: 20 };
-  const cMath = { id: uid(), name: "Math 101", defaultCapacity: 15 };
-  const cTeam = { id: uid(), name: "Teamwork", defaultCapacity: 18 };
-  const cFire = { id: uid(), name: "Fire Drill", defaultCapacity: 25 };
-  const courses = [cEng, cHsu, cMath, cTeam, cFire];
-
-  const rooms: Room[] = Array.from({ length: 5 }, (_, i) => ({
+export const createTemplateState = (): AppState => {
+  const participants = parseParticipantsCsv(participantsTemplate).map((row) => ({
     id: uid(),
-    name: `Room ${i + 1}`,
+    name: row.name,
+    tags: row.tags,
   }));
-
-  // Seed grid: each room offers a rotation
-  const slots: Slot[] = [];
-  for (let ri = 0; ri < rooms.length; ri++) {
-    for (let pe = 0; pe < PERIODS; pe++) {
-      const c = courses[(ri + pe) % courses.length];
-      slots.push({
-        id: uid(),
-        roomId: rooms[ri].id,
-        period: pe,
-        courseId: c.id,
-        capacity: c.defaultCapacity,
-      });
+  const courses = parseCoursesCsv(coursesTemplate).map((row) => ({
+    id: uid(),
+    name: row.name,
+    defaultCapacity: row.defaultCapacity,
+  }));
+  const rooms = parseRoomsCsv(roomsTemplate).map((row) => ({
+    id: uid(),
+    name: row.name,
+  }));
+  const coursesByName = new Map(courses.map((course) => [course.name, course]));
+  const roomsByName = new Map(rooms.map((room) => [room.name, room]));
+  const rules = parseRulesCsv(rulesTemplate).map((row) => {
+    const course = coursesByName.get(row.courseName);
+    if (!course) {
+      throw new CsvError(`Unknown course name "${row.courseName}" in rules template.`);
     }
-  }
+
+    return {
+      id: uid(),
+      courseId: course.id,
+      tag: row.tag,
+      type: row.type,
+    };
+  });
+  const schedule = parseScheduleCsv(scheduleTemplate, PERIODS);
+  const slots = schedule.rows.flatMap((row) => {
+    const room = roomsByName.get(row.roomName);
+    if (!room) {
+      throw new CsvError(`Unknown room name "${row.roomName}" in schedule template.`);
+    }
+
+    return row.courseNames.map((courseName, period) => {
+      if (!courseName) {
+        return {
+          id: uid(),
+          roomId: room.id,
+          period,
+          courseId: null,
+          capacity: 0,
+        };
+      }
+
+      const course = coursesByName.get(courseName);
+      if (!course) {
+        throw new CsvError(`Unknown course name "${courseName}" in schedule template.`);
+      }
+
+      return {
+        id: uid(),
+        roomId: room.id,
+        period,
+        courseId: course.id,
+        capacity: course.defaultCapacity,
+      };
+    });
+  });
 
   return {
-    participants: [
-      { id: uid(), name: "Alice", tags: ["eng"] },
-      { id: uid(), name: "Bob", tags: ["fieldB"] },
-      { id: uid(), name: "Carol", tags: ["eng", "fieldB"] },
-      { id: uid(), name: "Dan", tags: [] },
-      { id: uid(), name: "Eve", tags: ["fieldB"] },
-    ],
+    participants,
     courses,
     rooms,
     slots,
-    rules: [
-      { id: uid(), courseId: cHsu.id, tag: "all", type: "required" },
-      { id: uid(), courseId: cFire.id, tag: "all", type: "required" },
-      { id: uid(), courseId: cEng.id, tag: "eng", type: "optional" },
-      { id: uid(), courseId: cMath.id, tag: "fieldB", type: "required" },
-    ],
+    rules,
+    schedulePeriodLabels: schedule.periodLabels,
   };
 };
 
 export function useAppState() {
   const [state, setState] = useState<AppState>(() => {
-    if (typeof window === "undefined") return seed();
+    if (typeof window === "undefined") return createTemplateState();
     try {
       const raw = localStorage.getItem(KEY);
       if (raw) return JSON.parse(raw) as AppState;
-    } catch {}
-    return seed();
+    } catch {
+      return createTemplateState();
+    }
+    return createTemplateState();
   });
 
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify(state));
-    } catch {}
+    } catch {
+      // Ignore storage quota failures and keep the in-memory session state usable.
+    }
   }, [state]);
 
   return [state, setState, uid] as const;
