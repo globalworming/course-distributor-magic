@@ -334,7 +334,7 @@ function Index() {
               rows={rules}
               columns={ruleCols}
               onChange={(rows) => setState({ ...state, rules: rows })}
-              onAdd={() => ({
+              onAdd={(): Rule => ({
                 id: uid(),
                 courseId: courses[0]?.id ?? "",
                 tag: "all",
