@@ -15,6 +15,8 @@ type Props<T extends { id: string }> = {
   onChange: (rows: T[]) => void;
   onAdd: () => T;
   addLabel?: string;
+  actions?: ReactNode;
+  testId?: string;
 };
 
 export function EditableTable<T extends { id: string }>({
@@ -23,13 +25,15 @@ export function EditableTable<T extends { id: string }>({
   onChange,
   onAdd,
   addLabel = "Add row",
+  actions,
+  testId,
 }: Props<T>) {
   const update = (id: string, patch: Partial<T>) =>
     onChange(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const remove = (id: string) => onChange(rows.filter((r) => r.id !== id));
 
   return (
-    <div className="rounded-md border border-border bg-card">
+    <div className="rounded-md border border-border bg-card" data-testid={testId}>
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
@@ -80,7 +84,7 @@ export function EditableTable<T extends { id: string }>({
           </tbody>
         </table>
       </div>
-      <div className="flex justify-start border-t border-border p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-2">
         <Button
           variant="ghost"
           size="sm"
@@ -90,6 +94,7 @@ export function EditableTable<T extends { id: string }>({
           <Plus className="h-4 w-4" />
           {addLabel}
         </Button>
+        {actions}
       </div>
     </div>
   );

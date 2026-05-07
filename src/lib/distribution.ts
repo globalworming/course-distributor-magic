@@ -64,9 +64,7 @@ export function distribute(
 
     // Helper: candidate slots in a period, scored
     const candidates = (period: number): Slot[] => {
-      const list = slotsByPeriod[period].filter(
-        (s) => (loads.get(s.id) ?? 0) < s.capacity,
-      );
+      const list = slotsByPeriod[period].filter((s) => (loads.get(s.id) ?? 0) < s.capacity);
       return list.sort((a, b) => score(b, p) - score(a, p));
       function score(s: Slot, _p: Participant): number {
         const cid = s.courseId!;
@@ -88,9 +86,7 @@ export function distribute(
       periodOrder.filter(
         (pe) =>
           perPeriod[pe] === null &&
-          slotsByPeriod[pe].some(
-            (s) => s.courseId === cid && (loads.get(s.id) ?? 0) < s.capacity,
-          ),
+          slotsByPeriod[pe].some((s) => s.courseId === cid && (loads.get(s.id) ?? 0) < s.capacity),
       );
 
     // Sort required by fewest options

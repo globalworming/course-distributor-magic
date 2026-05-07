@@ -1,0 +1,5 @@
+- interactions will be csv driven, browser gui is only for display and triggering generation. 
+  - much less interactive forms, also better for performance
+  - default data shown can be used as template to download, then edited locally, then uploaded. 
+  - remove interactive data entry
+- roomXperiod needs no capacity override. so index and row based csv mapping rooms and courses should be viable

@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
+import { AlertCircle, Wand2, Download } from "lucide-react";
+import { EditableTable, type Column } from "@/components/EditableTable";
+import { TableCsvActions } from "@/components/TableCsvActions";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,8 +15,19 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { EditableTable, type Column } from "@/components/EditableTable";
-import { useAppState, uid, PERIODS } from "@/lib/store";
+import {
+  CsvError,
+  downloadCsvFile,
+  exportCoursesCsv,
+  exportParticipantsCsv,
+  exportRoomsCsv,
+  exportRulesCsv,
+  parseCoursesCsv,
+  parseParticipantsCsv,
+  parseRoomsCsv,
+  parseRulesCsv,
+} from "@/lib/csv";
+import { useAppState, uid, PERIODS, type AppState } from "@/lib/store";
 import {
   distribute,
   type Course,
@@ -21,7 +36,6 @@ import {
   type Room,
   type Slot,
 } from "@/lib/distribution";
-import { Wand2, Download } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   component: Index,
@@ -39,11 +53,18 @@ export const Route = createFileRoute("/")({
 
 const tagsToString = (tags: string[]) => tags.join(", ");
 const stringToTags = (s: string) =>
-  s.split(",").map((t) => t.trim()).filter(Boolean);
+  s
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
+
+type CsvTableKey = "participants" | "courses" | "rooms" | "rules";
+type CsvErrors = Partial<Record<CsvTableKey, string>>;
 
 function Index() {
   const [state, setState] = useAppState();
   const { participants, courses, rooms, slots, rules } = state;
+  const [csvErrors, setCsvErrors] = useState<CsvErrors>({});
 
   const allTags = useMemo(() => {
     const set = new Set<string>(["all"]);
@@ -52,14 +73,20 @@ function Index() {
     return [...set];
   }, [participants, rules]);
 
-  const [result, setResult] = useState<ReturnType<typeof distribute> | null>(
-    null,
-  );
+  const [result, setResult] = useState<ReturnType<typeof distribute> | null>(null);
 
-  const courseById = useMemo(
-    () => new Map(courses.map((c) => [c.id, c])),
-    [courses],
-  );
+  const updateState = (nextState: AppState) => {
+    setState(nextState);
+    setResult(null);
+  };
+
+  const clearCsvError = (table: CsvTableKey) =>
+    setCsvErrors((current) => ({ ...current, [table]: undefined }));
+
+  const setCsvError = (table: CsvTableKey, message: string) =>
+    setCsvErrors((current) => ({ ...current, [table]: message }));
+
+  const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const slotMap = useMemo(() => {
     // roomId|period -> slot
     const m = new Map<string, Slot>();
@@ -84,18 +111,17 @@ function Index() {
     const key = `${roomId}|${period}`;
     const existing = slotMap.get(key);
     if (existing) {
-      setState({
+      updateState({
         ...state,
         slots: slots.map((s) => (s.id === existing.id ? { ...s, ...patch } : s)),
       });
     } else {
       const fresh = { ...ensureSlot(roomId, period), ...patch };
-      setState({ ...state, slots: [...slots, fresh] });
+      updateState({ ...state, slots: [...slots, fresh] });
     }
   };
 
-  const run = () =>
-    setResult(distribute(participants, courses, rooms, slots, rules, PERIODS));
+  const run = () => setResult(distribute(participants, courses, rooms, slots, rules, PERIODS));
 
   const exportCsv = () => {
     if (!result) return;
@@ -123,21 +149,139 @@ function Index() {
         p?.name ?? "",
         p ? p.tags.join("|") : "",
         ...cells,
-        a.unmetRequired
-          .map((cid) => courseById.get(cid)?.name ?? cid)
-          .join("|"),
+        a.unmetRequired.map((cid) => courseById.get(cid)?.name ?? cid).join("|"),
       ]);
     }
     const csv = rows
       .map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(","))
       .join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "distribution.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsvFile("distribution.csv", csv);
+  };
+
+  const exportParticipants = () => {
+    clearCsvError("participants");
+    downloadCsvFile("participants.csv", exportParticipantsCsv(participants));
+  };
+
+  const exportCourses = () => {
+    clearCsvError("courses");
+    downloadCsvFile("courses.csv", exportCoursesCsv(courses));
+  };
+
+  const exportRooms = () => {
+    clearCsvError("rooms");
+    downloadCsvFile("rooms.csv", exportRoomsCsv(rooms));
+  };
+
+  const exportRules = () => {
+    try {
+      clearCsvError("rules");
+      const courseNames = getUniqueCourseNames(courses);
+      const csv = exportRulesCsv(
+        rules.map((rule) => {
+          const course = courseById.get(rule.courseId);
+          if (!course) {
+            throw new CsvError("Rules reference a course that no longer exists.");
+          }
+          const courseName = course.name.trim();
+          if (!courseName || !courseNames.has(courseName)) {
+            throw new CsvError(
+              "Rule export requires every referenced course to have a unique name.",
+            );
+          }
+          return {
+            courseName,
+            type: rule.type,
+            tag: rule.tag,
+          };
+        }),
+      );
+      downloadCsvFile("rules.csv", csv);
+    } catch (error) {
+      setCsvError("rules", getErrorMessage(error));
+    }
+  };
+
+  const importParticipants = async (file: File) => {
+    try {
+      const imported = parseParticipantsCsv(await file.text());
+      updateState({
+        ...state,
+        participants: imported.map((row) => ({ id: uid(), name: row.name, tags: row.tags })),
+      });
+      clearCsvError("participants");
+    } catch (error) {
+      setCsvError("participants", getErrorMessage(error));
+    }
+  };
+
+  const importCourses = async (file: File) => {
+    try {
+      const imported = parseCoursesCsv(await file.text());
+      const nextCourses = imported.map((row, index) => ({
+        id: courses[index]?.id ?? uid(),
+        name: row.name,
+        defaultCapacity: row.defaultCapacity,
+      }));
+      const validCourseIds = new Set(nextCourses.map((course) => course.id));
+      updateState({
+        ...state,
+        courses: nextCourses,
+        rules: rules.filter((rule) => validCourseIds.has(rule.courseId)),
+        slots: slots.map((slot) =>
+          slot.courseId && !validCourseIds.has(slot.courseId)
+            ? { ...slot, courseId: null, capacity: 0 }
+            : slot,
+        ),
+      });
+      clearCsvError("courses");
+    } catch (error) {
+      setCsvError("courses", getErrorMessage(error));
+    }
+  };
+
+  const importRooms = async (file: File) => {
+    try {
+      const imported = parseRoomsCsv(await file.text());
+      const nextRooms = imported.map((row, index) => ({
+        id: rooms[index]?.id ?? uid(),
+        name: row.name,
+      }));
+      const validRoomIds = new Set(nextRooms.map((room) => room.id));
+      updateState({
+        ...state,
+        rooms: nextRooms,
+        slots: slots.filter((slot) => validRoomIds.has(slot.roomId)),
+      });
+      clearCsvError("rooms");
+    } catch (error) {
+      setCsvError("rooms", getErrorMessage(error));
+    }
+  };
+
+  const importRules = async (file: File) => {
+    try {
+      const imported = parseRulesCsv(await file.text());
+      const coursesByName = getUniqueCourseNames(courses);
+      updateState({
+        ...state,
+        rules: imported.map((row, index) => {
+          const course = coursesByName.get(row.courseName);
+          if (!course) {
+            throw new CsvError(`Unknown course name "${row.courseName}" in rules CSV.`);
+          }
+          return {
+            id: rules[index]?.id ?? uid(),
+            courseId: course.id,
+            tag: row.tag,
+            type: row.type,
+          };
+        }),
+      });
+      clearCsvError("rules");
+    } catch (error) {
+      setCsvError("rules", getErrorMessage(error));
+    }
   };
 
   // Columns
@@ -145,9 +289,7 @@ function Index() {
     {
       key: "name",
       header: "Name",
-      render: (r, u) => (
-        <Input value={r.name} onChange={(e) => u({ name: e.target.value })} />
-      ),
+      render: (r, u) => <Input value={r.name} onChange={(e) => u({ name: e.target.value })} />,
     },
     {
       key: "tags",
@@ -167,9 +309,7 @@ function Index() {
     {
       key: "name",
       header: "Course name",
-      render: (r, u) => (
-        <Input value={r.name} onChange={(e) => u({ name: e.target.value })} />
-      ),
+      render: (r, u) => <Input value={r.name} onChange={(e) => u({ name: e.target.value })} />,
     },
     {
       key: "cap",
@@ -180,9 +320,7 @@ function Index() {
           type="number"
           min={0}
           value={r.defaultCapacity}
-          onChange={(e) =>
-            u({ defaultCapacity: Math.max(0, Number(e.target.value) || 0) })
-          }
+          onChange={(e) => u({ defaultCapacity: Math.max(0, Number(e.target.value) || 0) })}
         />
       ),
     },
@@ -192,9 +330,7 @@ function Index() {
     {
       key: "name",
       header: "Room",
-      render: (r, u) => (
-        <Input value={r.name} onChange={(e) => u({ name: e.target.value })} />
-      ),
+      render: (r, u) => <Input value={r.name} onChange={(e) => u({ name: e.target.value })} />,
     },
   ];
 
@@ -222,10 +358,7 @@ function Index() {
       header: "Type",
       width: "140px",
       render: (r, u) => (
-        <Select
-          value={r.type}
-          onValueChange={(v) => u({ type: v as Rule["type"] })}
-        >
+        <Select value={r.type} onValueChange={(v) => u({ type: v as Rule["type"] })}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -263,12 +396,10 @@ function Index() {
       <header className="border-b border-border bg-card">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <div>
-            <h1 className="text-xl font-semibold tracking-tight">
-              Course Distributor
-            </h1>
+            <h1 className="text-xl font-semibold tracking-tight">Course Distributor</h1>
             <p className="text-sm text-muted-foreground">
-              {rooms.length} rooms × {PERIODS} periods. Assign each participant
-              to one course per period.
+              {rooms.length} rooms × {PERIODS} periods. Assign each participant to one course per
+              period.
             </p>
           </div>
           <div className="flex gap-2">
@@ -276,12 +407,7 @@ function Index() {
               <Wand2 className="h-4 w-4" />
               Distribute
             </Button>
-            <Button
-              variant="outline"
-              onClick={exportCsv}
-              disabled={!result}
-              className="gap-1.5"
-            >
+            <Button variant="outline" onClick={exportCsv} disabled={!result} className="gap-1.5">
               <Download className="h-4 w-4" />
               Export CSV
             </Button>
@@ -305,12 +431,23 @@ function Index() {
               <EditableTable
                 rows={participants}
                 columns={participantCols}
-                onChange={(rows) =>
-                  setState({ ...state, participants: rows })
-                }
+                onChange={(rows) => {
+                  clearCsvError("participants");
+                  updateState({ ...state, participants: rows });
+                }}
                 onAdd={() => ({ id: uid(), name: "", tags: [] })}
                 addLabel="Add participant"
+                testId="participants-table"
+                actions={
+                  <TableCsvActions
+                    tableKey="participants"
+                    label="participants"
+                    onExport={exportParticipants}
+                    onImport={importParticipants}
+                  />
+                }
               />
+              {csvErrors.participants && <TableCsvError message={csvErrors.participants} />}
             </CardContent>
           </Card>
 
@@ -322,10 +459,23 @@ function Index() {
               <EditableTable
                 rows={courses}
                 columns={courseCols}
-                onChange={(rows) => setState({ ...state, courses: rows })}
+                onChange={(rows) => {
+                  clearCsvError("courses");
+                  updateState({ ...state, courses: rows });
+                }}
                 onAdd={() => ({ id: uid(), name: "", defaultCapacity: 20 })}
                 addLabel="Add course"
+                testId="courses-table"
+                actions={
+                  <TableCsvActions
+                    tableKey="courses"
+                    label="courses"
+                    onExport={exportCourses}
+                    onImport={importCourses}
+                  />
+                }
               />
+              {csvErrors.courses && <TableCsvError message={csvErrors.courses} />}
             </CardContent>
           </Card>
         </div>
@@ -338,13 +488,26 @@ function Index() {
             <EditableTable
               rows={rooms}
               columns={roomCols}
-              onChange={(rows) => setState({ ...state, rooms: rows })}
+              onChange={(rows) => {
+                clearCsvError("rooms");
+                updateState({ ...state, rooms: rows });
+              }}
               onAdd={() => ({
                 id: uid(),
                 name: `Room ${rooms.length + 1}`,
               })}
               addLabel="Add room"
+              testId="rooms-table"
+              actions={
+                <TableCsvActions
+                  tableKey="rooms"
+                  label="rooms"
+                  onExport={exportRooms}
+                  onImport={importRooms}
+                />
+              }
             />
+            {csvErrors.rooms && <TableCsvError message={csvErrors.rooms} />}
           </CardContent>
         </Card>
 
@@ -366,10 +529,7 @@ function Index() {
                       Room \ Period
                     </th>
                     {Array.from({ length: PERIODS }, (_, i) => (
-                      <th
-                        key={i}
-                        className="border border-border px-2 py-2 text-left font-medium"
-                      >
+                      <th key={i} className="border border-border px-2 py-2 text-left font-medium">
                         Period {i + 1}
                       </th>
                     ))}
@@ -385,7 +545,7 @@ function Index() {
                         const slot = slotMap.get(`${room.id}|${pe}`);
                         const courseId = slot?.courseId ?? "__none";
                         const capacity = slot?.capacity ?? 0;
-                        const used = slot ? demand.get(slot.id) ?? 0 : 0;
+                        const used = slot ? (demand.get(slot.id) ?? 0) : 0;
                         const over = used > capacity && capacity > 0;
                         return (
                           <td
@@ -400,9 +560,7 @@ function Index() {
                                   const c = cid ? courseById.get(cid) : null;
                                   updateSlot(room.id, pe, {
                                     courseId: cid,
-                                    capacity:
-                                      capacity ||
-                                      (c?.defaultCapacity ?? 20),
+                                    capacity: capacity || (c?.defaultCapacity ?? 20),
                                   });
                                 }}
                               >
@@ -425,10 +583,7 @@ function Index() {
                                   value={capacity}
                                   onChange={(e) =>
                                     updateSlot(room.id, pe, {
-                                      capacity: Math.max(
-                                        0,
-                                        Number(e.target.value) || 0,
-                                      ),
+                                      capacity: Math.max(0, Number(e.target.value) || 0),
                                     })
                                   }
                                   className="h-7 w-16 text-xs"
@@ -461,8 +616,7 @@ function Index() {
             <CardTitle className="text-base">
               Rules{" "}
               <span className="font-normal text-muted-foreground">
-                — tag <code className="rounded bg-muted px-1">all</code> applies
-                to everyone
+                — tag <code className="rounded bg-muted px-1">all</code> applies to everyone
               </span>
             </CardTitle>
           </CardHeader>
@@ -470,7 +624,10 @@ function Index() {
             <EditableTable
               rows={rules}
               columns={ruleCols}
-              onChange={(rows) => setState({ ...state, rules: rows })}
+              onChange={(rows) => {
+                clearCsvError("rules");
+                updateState({ ...state, rules: rows });
+              }}
               onAdd={(): Rule => ({
                 id: uid(),
                 courseId: courses[0]?.id ?? "",
@@ -478,7 +635,17 @@ function Index() {
                 type: "required",
               })}
               addLabel="Add rule"
+              testId="rules-table"
+              actions={
+                <TableCsvActions
+                  tableKey="rules"
+                  label="rules"
+                  onExport={exportRules}
+                  onImport={importRules}
+                />
+              }
             />
+            {csvErrors.rules && <TableCsvError message={csvErrors.rules} />}
           </CardContent>
         </Card>
 
@@ -510,9 +677,7 @@ function Index() {
                   </thead>
                   <tbody>
                     {result.assignments.map((a) => {
-                      const p = participants.find(
-                        (x) => x.id === a.participantId,
-                      );
+                      const p = participants.find((x) => x.id === a.participantId);
                       return (
                         <tr key={a.participantId}>
                           <td className="border border-border px-2 py-1.5 align-top">
@@ -522,20 +687,11 @@ function Index() {
                             </div>
                           </td>
                           {a.perPeriod.map((sid, i) => {
-                            const s = sid
-                              ? slots.find((x) => x.id === sid)
-                              : null;
-                            const c = s?.courseId
-                              ? courseById.get(s.courseId)
-                              : null;
-                            const room = s
-                              ? rooms.find((r) => r.id === s.roomId)
-                              : null;
+                            const s = sid ? slots.find((x) => x.id === sid) : null;
+                            const c = s?.courseId ? courseById.get(s.courseId) : null;
+                            const room = s ? rooms.find((r) => r.id === s.roomId) : null;
                             return (
-                              <td
-                                key={i}
-                                className="border border-border px-2 py-1.5 align-top"
-                              >
+                              <td key={i} className="border border-border px-2 py-1.5 align-top">
                                 {c ? (
                                   <>
                                     <div>{c.name}</div>
@@ -544,9 +700,7 @@ function Index() {
                                     </div>
                                   </>
                                 ) : (
-                                  <span className="text-muted-foreground">
-                                    —
-                                  </span>
+                                  <span className="text-muted-foreground">—</span>
                                 )}
                               </td>
                             );
@@ -556,10 +710,7 @@ function Index() {
                               <div className="text-destructive">
                                 Missing:{" "}
                                 {a.unmetRequired
-                                  .map(
-                                    (cid) =>
-                                      courseById.get(cid)?.name ?? cid,
-                                  )
+                                  .map((cid) => courseById.get(cid)?.name ?? cid)
                                   .join(", ")}
                               </div>
                             )}
@@ -580,5 +731,34 @@ function Index() {
         )}
       </main>
     </div>
+  );
+}
+
+function getUniqueCourseNames(courses: Course[]) {
+  const coursesByName = new Map<string, Course>();
+  for (const course of courses) {
+    const name = course.name.trim();
+    if (!name) {
+      throw new CsvError("Rule CSV sync requires every course to have a non-empty name.");
+    }
+    if (coursesByName.has(name)) {
+      throw new CsvError(`Rule CSV sync requires unique course names. Duplicate: "${name}".`);
+    }
+    coursesByName.set(name, course);
+  }
+  return coursesByName;
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  return "CSV import failed.";
+}
+
+function TableCsvError({ message }: { message: string }) {
+  return (
+    <Alert variant="destructive" className="mt-3">
+      <AlertCircle className="h-4 w-4" />
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
   );
 }
