@@ -19,19 +19,20 @@ export function TableCsvActions({ tableKey, label, onExport, onImport }: Props) 
   };
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex justify-end gap-2">
       <Button
         type="button"
         variant="outline"
         size="sm"
         onClick={onExport}
+        className=""
         aria-label={`Export ${label} CSV`}
         data-testid={`${tableKey}-export-csv`}
       >
         <Download className="h-4 w-4" />
         Export CSV
       </Button>
-      <Button type="button" variant="outline" size="sm" asChild>
+      <Button type="button" variant="outline" size="sm" className="" asChild>
         <label className="cursor-pointer">
           <Upload className="h-4 w-4" />
           Import CSV

@@ -17,8 +17,8 @@ type Props<T> = {
 
 export function ReadonlyTable<T>({ rows, columns, emptyState, actions, testId }: Props<T>) {
   return (
-    <div className="min-w-0 w-full" data-testid={testId}>
-      <div className="w-full min-w-0 overflow-x-auto rounded-md border border-border">
+    <div className="w-full" data-testid={testId}>
+      <div className="w-full overflow-x-auto rounded-md border border-border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
@@ -54,7 +54,7 @@ export function ReadonlyTable<T>({ rows, columns, emptyState, actions, testId }:
         </table>
       </div>
       {actions && (
-        <div className="flex flex-wrap items-center justify-end gap-2 pt-3">{actions}</div>
+        <div className="flex justify-end gap-2">{actions}</div>
       )}
     </div>
   );
