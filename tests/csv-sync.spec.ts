@@ -89,7 +89,12 @@ test("downloads templates, reimports CSV data, and round-trips the schedule grid
   const rulesDownload = await captureCsvExport(page, "rules-export-csv");
   expect(rulesDownload.filename).toBe("rules.csv");
   expect(rulesDownload.content).toBe(
-    '"courseName","type","tag"\n"English Basics","optional","eng"',
+    [
+      '"courseName","type","tag"',
+      '"English Basics","required","eng"',
+      '"Machine Basics","optional","example1"',
+      '"Customer Support","required","all"',
+    ].join("\n"),
   );
 
   const participantsDownload = await captureCsvExport(page, "participants-export-csv");
@@ -97,10 +102,10 @@ test("downloads templates, reimports CSV data, and round-trips the schedule grid
   const participantRows = participantsDownload.content.split("\n");
   expect(participantRows).toHaveLength(34);
   expect(participantRows[0]).toBe('"name","tags"');
-  expect(participantsDownload.content).toContain('"Alice",""');
-  expect(participantsDownload.content).toContain('"Bob","eng"');
+  expect(participantsDownload.content).toContain('"Alice","eng, example1, example2"');
+  expect(participantsDownload.content).toContain('"Bob",""');
   expect(participantsDownload.content).toContain('"Felix","eng"');
-  expect(participantsDownload.content).toContain('"Gia",""');
+  expect(participantsDownload.content).toContain('"Gia","eng"');
 
   const coursesDownload = await captureCsvExport(page, "courses-export-csv");
   expect(coursesDownload.filename).toBe("courses.csv");

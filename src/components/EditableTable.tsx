@@ -33,8 +33,8 @@ export function EditableTable<T extends { id: string }>({
   const remove = (id: string) => onChange(rows.filter((r) => r.id !== id));
 
   return (
-    <div className="rounded-md border border-border bg-card" data-testid={testId}>
-      <div className="overflow-x-auto">
+    <div className="min-w-0 w-full" data-testid={testId}>
+      <div className="w-full min-w-0 overflow-x-auto rounded-md border border-border">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-muted-foreground">
             <tr>
@@ -84,7 +84,7 @@ export function EditableTable<T extends { id: string }>({
           </tbody>
         </table>
       </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border p-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 pt-3">
         <Button
           variant="ghost"
           size="sm"

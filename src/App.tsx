@@ -465,42 +465,40 @@ export default function App() {
         </div>
       </header>
 
-      <main className="mx-auto grid max-w-6xl gap-6 px-6 py-6">
-        <div className="grid gap-6 lg:grid-cols-2">
-          <DataCard title="Participants" error={csvErrors.participants}>
-            <ReadonlyTable
-              rows={participantRows}
-              columns={participantColumns}
-              emptyState={emptyState}
-              testId="participants-table"
-              actions={
-                <TableCsvActions
-                  tableKey="participants"
-                  label="participants"
-                  onExport={exportParticipants}
-                  onImport={importParticipants}
-                />
-              }
-            />
-          </DataCard>
+      <main className="mx-auto grid w-full min-w-0 gap-6 px-6 py-6">
+        <DataCard title="Participants" error={csvErrors.participants}>
+          <ReadonlyTable
+            rows={participantRows}
+            columns={participantColumns}
+            emptyState={emptyState}
+            testId="participants-table"
+            actions={
+              <TableCsvActions
+                tableKey="participants"
+                label="participants"
+                onExport={exportParticipants}
+                onImport={importParticipants}
+              />
+            }
+          />
+        </DataCard>
 
-          <DataCard title="Courses" error={csvErrors.courses}>
-            <ReadonlyTable
-              rows={courseRows}
-              columns={courseColumns}
-              emptyState={emptyState}
-              testId="courses-table"
-              actions={
-                <TableCsvActions
-                  tableKey="courses"
-                  label="courses"
-                  onExport={exportCourses}
-                  onImport={importCourses}
-                />
-              }
-            />
-          </DataCard>
-        </div>
+        <DataCard title="Courses" error={csvErrors.courses}>
+          <ReadonlyTable
+            rows={courseRows}
+            columns={courseColumns}
+            emptyState={emptyState}
+            testId="courses-table"
+            actions={
+              <TableCsvActions
+                tableKey="courses"
+                label="courses"
+                onExport={exportCourses}
+                onImport={importCourses}
+              />
+            }
+          />
+        </DataCard>
 
         <DataCard title="Rooms" error={csvErrors.rooms}>
           <ReadonlyTable
@@ -526,7 +524,7 @@ export default function App() {
               default capacity.
             </div>
             <div
-              className="overflow-x-auto rounded-md border border-border bg-card"
+              className="w-full min-w-0 overflow-x-auto rounded-md border border-border"
               data-testid="schedule-table"
             >
               <table className="w-full border-collapse text-sm">
@@ -583,7 +581,7 @@ export default function App() {
                 </tbody>
               </table>
             </div>
-            <div className="flex justify-end">
+            <div className="flex flex-wrap justify-end gap-2 pt-3">
               <TableCsvActions
                 tableKey="schedule"
                 label="schedule"
