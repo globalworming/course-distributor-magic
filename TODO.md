@@ -1,0 +1,2 @@
+ - replace all test data-test-id in e2e tests with meaningful aria label
+ - footer should show "Distribute" and "Export results" buttons
