@@ -1,21 +1,21 @@
-"name","defaultCapacity"
-"English Basics","20"
-"HSU Safety","20"
-"Math 101","20"
-"Teamwork","20"
-"Fire Drill","20"
-"Logistics 101","20"
-"First Aid","20"
-"Computer Skills","20"
-"Workshop Prep","20"
-"Communication","20"
-"Project Planning","20"
-"Quality Check","20"
-"Machine Basics","20"
-"Documentation","20"
-"Field Practice","20"
-"Safety Review","20"
-"Problem Solving","20"
-"Leadership","20"
-"Customer Support","20"
-"Data Entry","20"
+name,defaultCapacity
+English Basics,8
+HSU Safety,20
+Math 101,20
+Teamwork,20
+Fire Drill,6
+Logistics 101,20
+First Aid,20
+Computer Skills,5
+Workshop Prep,20
+Communication,20
+Project Planning,20
+Quality Check,20
+Machine Basics,20
+Documentation,20
+Field Practice,20
+Safety Review,20
+Problem Solving,20
+Leadership,20
+Customer Support,20
+Data Entry,20

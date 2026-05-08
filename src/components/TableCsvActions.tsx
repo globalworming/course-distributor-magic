@@ -1,7 +1,7 @@
+import { useId } from "react";
 import type { ChangeEvent } from "react";
 import { Download, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
 type Props = {
   tableKey: string;
@@ -11,6 +11,8 @@ type Props = {
 };
 
 export function TableCsvActions({ tableKey, label, onExport, onImport }: Props) {
+  const inputId = useId();
+
   const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -30,22 +32,23 @@ export function TableCsvActions({ tableKey, label, onExport, onImport }: Props) 
         data-testid={`${tableKey}-export-csv`}
       >
         <Download className="h-4 w-4" />
-        Export CSV
+        Export
       </Button>
-      <Button type="button" variant="outline" size="sm" className="" asChild>
-        <label className="cursor-pointer">
+      <Button type="button" variant="outline" size="sm" asChild>
+        <label htmlFor={inputId} className="cursor-pointer">
           <Upload className="h-4 w-4" />
-          Import CSV
-          <Input
-            type="file"
-            accept=".csv,text/csv"
-            className="sr-only"
-            onChange={(event) => void handleFileChange(event)}
-            aria-label={`Import ${label} CSV file`}
-            data-testid={`${tableKey}-import-csv-input`}
-          />
+          Import
         </label>
       </Button>
+      <input
+        id={inputId}
+        type="file"
+        accept=".csv,text/csv"
+        className="sr-only"
+        onChange={(event) => void handleFileChange(event)}
+        aria-label={`Import ${label} CSV file`}
+        data-testid={`${tableKey}-import-csv-input`}
+      />
     </div>
   );
 }
