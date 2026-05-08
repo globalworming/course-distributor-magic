@@ -614,6 +614,13 @@ export default function App() {
               />
             }
           />
+          <div className="mt-3 rounded-md border border-border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+            Set one rule per course and tag combination. Use{" "}
+            <span className="font-medium">required</span> when tagged participants must get that
+            course before anything else, and use <span className="font-medium">optional</span> when
+            it should only be used as fallback after other unique courses are unavailable. The tag{" "}
+            <span className="font-medium">all</span> applies the rule to everyone.
+          </div>
         </DataCard>
 
         {result && (

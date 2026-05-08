@@ -1,2 +1,4 @@
-"courseName","type","tag"
-"English Basics","required","eng"
+courseName,type,tag
+English Basics,required,eng
+Machine Basics,optional,example1
+Customer Support,required,all

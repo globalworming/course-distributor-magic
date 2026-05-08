@@ -197,6 +197,12 @@ function chooseCandidateSlot(
     }, 0);
     let score = 0;
 
+    // Keep this priority order aligned with the distributor rules and tests in
+    // `src/lib/distribution.test.ts`:
+    // - "places required courses before optional preferences"
+    // - "treats optional courses as fallback when another unique course is available"
+    // - "uses an optional course after other unique courses fill up"
+    // - "uses an optional course when no other unique course remains for the participant"
     if (required.has(courseId) && !assignedCourses.has(courseId)) score += 10000;
     else if (!assignedCourses.has(courseId) && !optional.has(courseId)) score += 1000;
     else if (optional.has(courseId) && !assignedCourses.has(courseId)) score += 100;
