@@ -198,8 +198,8 @@ function chooseCandidateSlot(
     let score = 0;
 
     if (required.has(courseId) && !assignedCourses.has(courseId)) score += 10000;
-    else if (optional.has(courseId) && !assignedCourses.has(courseId)) score += 1000;
-    else if (!assignedCourses.has(courseId)) score += 100;
+    else if (!assignedCourses.has(courseId) && !optional.has(courseId)) score += 1000;
+    else if (optional.has(courseId) && !assignedCourses.has(courseId)) score += 100;
     else if (optional.has(courseId)) score += 20;
 
     score += slot.capacity - slotLoad;

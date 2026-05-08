@@ -47,6 +47,21 @@ describe("distribute", () => {
     expect(result.assignments[0].unmetRequired).toEqual([]);
   });
 
+  it("treats optional courses as fallback when another unique course is available", () => {
+    const participants: Participant[] = [{ id: "participant-1", name: "Ada", tags: ["alpha"] }];
+    const slots: Slot[] = [
+      { id: "slot-b1", roomId: "room-1", period: 0, courseId: courseB.id, capacity: 1 },
+      { id: "slot-c1", roomId: "room-2", period: 0, courseId: courseOptional.id, capacity: 1 },
+    ];
+    const rules: Rule[] = [
+      { id: "rule-1", courseId: courseOptional.id, tag: "alpha", type: "optional" },
+    ];
+
+    const result = distribute(participants, [courseB, courseOptional], rooms, slots, rules, 1);
+
+    expect(result.assignments[0].perPeriod).toEqual(["slot-b1"]);
+  });
+
   it("never exceeds slot capacity", () => {
     const participants: Participant[] = [
       { id: "participant-1", name: "Ada", tags: [] },
@@ -119,6 +134,49 @@ describe("distribute", () => {
     );
 
     expect(new Set(assignedCourseIds).size).toBe(2);
+  });
+
+  it("uses an optional course after other unique courses fill up", () => {
+    const participants: Participant[] = [
+      { id: "participant-1", name: "Ada", tags: ["beta"] },
+      { id: "participant-2", name: "Bruno", tags: ["alpha"] },
+    ];
+    const slots: Slot[] = [
+      { id: "slot-b1", roomId: "room-1", period: 0, courseId: courseB.id, capacity: 1 },
+      { id: "slot-c1", roomId: "room-2", period: 0, courseId: courseOptional.id, capacity: 1 },
+    ];
+    const rules: Rule[] = [
+      { id: "rule-1", courseId: courseB.id, tag: "beta", type: "required" },
+      { id: "rule-2", courseId: courseOptional.id, tag: "alpha", type: "optional" },
+    ];
+
+    const result = distribute(participants, [courseB, courseOptional], rooms, slots, rules, 1);
+
+    expect(
+      result.assignments.find((assignment) => assignment.participantId === "participant-1"),
+    ).toMatchObject({ perPeriod: ["slot-b1"] });
+    expect(
+      result.assignments.find((assignment) => assignment.participantId === "participant-2"),
+    ).toMatchObject({ perPeriod: ["slot-c1"] });
+  });
+
+  it("uses an optional course when no other unique course remains for the participant", () => {
+    const participants: Participant[] = [{ id: "participant-1", name: "Ada", tags: ["alpha"] }];
+    const slots: Slot[] = [
+      { id: "slot-b1", roomId: "room-1", period: 0, courseId: courseB.id, capacity: 1 },
+      { id: "slot-b2", roomId: "room-1", period: 1, courseId: courseB.id, capacity: 1 },
+      { id: "slot-c2", roomId: "room-2", period: 1, courseId: courseOptional.id, capacity: 1 },
+    ];
+    const rules: Rule[] = [
+      { id: "rule-1", courseId: courseOptional.id, tag: "alpha", type: "optional" },
+    ];
+
+    const result = distribute(participants, [courseB, courseOptional], rooms, slots, rules, 2);
+    const assignedCourseIds = result.assignments[0].perPeriod.map(
+      (slotId) => slots.find((slot) => slot.id === slotId)?.courseId,
+    );
+
+    expect(assignedCourseIds).toEqual([courseB.id, courseOptional.id]);
   });
 
   it("keeps participants in a course when only a repeated course is available", () => {
