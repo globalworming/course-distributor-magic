@@ -84,6 +84,8 @@ test("downloads templates, reimports CSV data, and round-trips the schedule grid
   const roomsTable = page.getByTestId("rooms-table");
   const rulesTable = page.getByTestId("rules-table");
   const scheduleTable = page.getByTestId("schedule-table");
+  const distributionTable = page.getByTestId("distribution-table");
+  const distributionIssuesTable = page.getByTestId("distribution-issues-table");
   const rulesDownload = await captureCsvExport(page, "rules-export-csv");
   expect(rulesDownload.filename).toBe("rules.csv");
   expect(rulesDownload.content).toBe(
@@ -159,9 +161,27 @@ test("downloads templates, reimports CSV data, and round-trips the schedule grid
   await expect(page.getByText("prefers one visit per course for each participant")).toBeVisible();
 
   await page.getByRole("button", { name: "Distribute" }).click();
-  await expect(page.getByRole("columnheader", { name: "Mo 1" })).toHaveCount(2);
-  await expect(page.getByRole("columnheader", { name: "Fr 5" })).toHaveCount(2);
-  await expect(page.getByText("fall back to repeats only when that is the only way")).toBeVisible();
+  await expect(distributionTable.getByRole("columnheader", { name: "Period" })).toBeVisible();
+  await expect(distributionTable.getByRole("columnheader", { name: "Room" })).toBeVisible();
+  await expect(distributionTable.getByRole("columnheader", { name: "Course" })).toBeVisible();
+  await expect(distributionTable.getByRole("columnheader", { name: "Participants" })).toBeVisible();
+  await expect(distributionTable).toContainText("Lab A");
+  await expect(distributionTable).toContainText("Logistics 101");
+  await expect(distributionTable).toContainText("Ada Lovelace");
+  await expect(distributionTable).toContainText("Bruno Mars");
+  await expect(distributionIssuesTable).toContainText(
+    "repeated course to avoid an empty assignment",
+  );
+
+  const distributionDownload = await captureCsvExport(page, "distribution-export-csv");
+  expect(distributionDownload.filename).toBe("distribution.csv");
+  const distributionRows = distributionDownload.content.split("\n");
+  expect(distributionRows[0]).toBe('"period","room","course","participants"');
+  expect(distributionRows[1]).toContain('"Mo 1"');
+  expect(distributionRows[1]).toContain('"Lab A"');
+  expect(distributionRows[1]).toContain('"Logistics 101"');
+  expect(distributionDownload.content).toContain("Ada Lovelace");
+  expect(distributionDownload.content).toContain("Bruno Mars");
 
   const scheduleDownload = await captureCsvExport(page, "schedule-export-csv");
   expect(scheduleDownload.filename).toBe("schedule.csv");

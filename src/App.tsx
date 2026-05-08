@@ -36,7 +36,12 @@ export default function App() {
     () => new Map(courses.map((course) => [course.id, course])),
     [courses],
   );
+  const participantById = useMemo(
+    () => new Map(participants.map((participant) => [participant.id, participant])),
+    [participants],
+  );
   const roomById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
+  const slotById = useMemo(() => new Map(slots.map((slot) => [slot.id, slot])), [slots]);
   const slotMap = useMemo(() => {
     const next = new Map<string, Slot>();
     for (const slot of slots) {
@@ -52,6 +57,49 @@ export default function App() {
     }
     return next;
   }, [result, slots]);
+  const distributionRows = useMemo(() => {
+    if (!result) return [];
+
+    const participantsBySlotId = new Map<string, string[]>();
+    for (const assignment of result.assignments) {
+      const participant = participantById.get(assignment.participantId);
+      if (!participant) continue;
+
+      for (const slotId of assignment.perPeriod) {
+        if (!slotId) continue;
+        const names = participantsBySlotId.get(slotId) ?? [];
+        names.push(participant.name);
+        participantsBySlotId.set(slotId, names);
+      }
+    }
+
+    return slots
+      .filter((slot) => slot.courseId)
+      .map((slot) => ({
+        slotId: slot.id,
+        period: slot.period,
+        periodLabel: schedulePeriodLabels[slot.period] ?? `Period ${slot.period + 1}`,
+        roomName: roomById.get(slot.roomId)?.name ?? "Unknown room",
+        courseName: courseById.get(slot.courseId!)?.name ?? "Unknown course",
+        participants: participantsBySlotId.get(slot.id) ?? [],
+      }))
+      .sort((a, b) => a.period - b.period || a.roomName.localeCompare(b.roomName));
+  }, [result, participantById, slots, schedulePeriodLabels, roomById, courseById]);
+  const issueRows = useMemo(() => {
+    if (!result) return [];
+
+    return result.assignments
+      .map((assignment) => ({
+        participantName:
+          participantById.get(assignment.participantId)?.name ?? "Unknown participant",
+        missingRequired: assignment.unmetRequired
+          .map((courseId) => courseById.get(courseId)?.name ?? courseId)
+          .join(", "),
+        notes: assignment.notes.join(" | "),
+      }))
+      .filter((row) => row.missingRequired || row.notes)
+      .sort((a, b) => a.participantName.localeCompare(b.participantName));
+  }, [result, participantById, courseById]);
 
   const updateState = (nextState: AppState) => {
     setState(nextState);
@@ -74,28 +122,11 @@ export default function App() {
 
   const exportDistribution = () => {
     if (!result) return;
-    const header = ["Participant", "Tags", ...schedulePeriodLabels, "Unmet required"];
+    const header = ["period", "room", "course", "participants"];
     const rows = [header];
 
-    for (const assignment of result.assignments) {
-      const participant = participants.find((item) => item.id === assignment.participantId);
-      const periodCells = assignment.perPeriod.map((slotId) => {
-        if (!slotId) return "—";
-        const slot = slots.find((item) => item.id === slotId);
-        if (!slot) return "—";
-        const course = slot.courseId ? courseById.get(slot.courseId) : null;
-        const room = roomById.get(slot.roomId);
-        return `${course?.name ?? "?"} (${room?.name ?? "?"})`;
-      });
-
-      rows.push([
-        participant?.name ?? "",
-        participant ? participant.tags.join("|") : "",
-        ...periodCells,
-        assignment.unmetRequired
-          .map((courseId) => courseById.get(courseId)?.name ?? courseId)
-          .join("|"),
-      ]);
+    for (const row of distributionRows) {
+      rows.push([row.periodLabel, row.roomName, row.courseName, row.participants.join(", ")]);
     }
 
     const csv = rows
@@ -425,6 +456,7 @@ export default function App() {
               onClick={exportDistribution}
               disabled={!result}
               className="gap-1.5"
+              data-testid="distribution-export-csv"
             >
               <Download className="h-4 w-4" />
               Export results
@@ -585,94 +617,74 @@ export default function App() {
         </DataCard>
 
         {result && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-3 text-sm text-muted-foreground">
-                Assignments prioritize required rules first, avoid repeating courses when possible,
-                and fall back to repeats only when that is the only way to keep a participant
-                placed.
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 text-muted-foreground">
-                      <th className="border border-border px-2 py-2 text-left font-medium">
-                        Participant
-                      </th>
-                      {schedulePeriodLabels.map((label, index) => (
-                        <th
-                          key={index}
-                          className="border border-border px-2 py-2 text-left font-medium"
-                        >
-                          {label}
-                        </th>
-                      ))}
-                      <th className="border border-border px-2 py-2 text-left font-medium">
-                        Issues
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.assignments.map((assignment) => {
-                      const participant = participants.find(
-                        (item) => item.id === assignment.participantId,
-                      );
-                      return (
-                        <tr key={assignment.participantId}>
-                          <td className="border border-border px-2 py-1.5 align-top">
-                            <div className="font-medium">{participant?.name}</div>
-                            <div className="text-xs text-muted-foreground">
-                              {participant?.tags.join(", ")}
-                            </div>
-                          </td>
-                          {assignment.perPeriod.map((slotId, period) => {
-                            const slot = slotId ? slots.find((item) => item.id === slotId) : null;
-                            const course = slot?.courseId ? courseById.get(slot.courseId) : null;
-                            const room = slot ? roomById.get(slot.roomId) : null;
-                            return (
-                              <td
-                                key={period}
-                                className="border border-border px-2 py-1.5 align-top"
-                              >
-                                {course ? (
-                                  <>
-                                    <div>{course.name}</div>
-                                    <div className="text-xs text-muted-foreground">
-                                      {room?.name}
-                                    </div>
-                                  </>
-                                ) : (
-                                  <span className="text-muted-foreground">—</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td className="border border-border px-2 py-1.5 align-top text-xs">
-                            {assignment.unmetRequired.length > 0 && (
-                              <div className="text-destructive">
-                                Missing:{" "}
-                                {assignment.unmetRequired
-                                  .map((courseId) => courseById.get(courseId)?.name ?? courseId)
-                                  .join(", ")}
-                              </div>
-                            )}
-                            {assignment.notes.map((note) => (
-                              <div key={note} className="text-muted-foreground">
-                                {note}
-                              </div>
-                            ))}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+          <>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Distribution</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-3 text-sm text-muted-foreground">
+                  Assignments are grouped by period and room so each row shows who attends a
+                  scheduled course in that slot.
+                </div>
+                <ReadonlyTable
+                  rows={distributionRows}
+                  testId="distribution-table"
+                  emptyState="No scheduled slots available."
+                  columns={[
+                    { key: "period", header: "Period", render: (row) => row.periodLabel },
+                    { key: "room", header: "Room", render: (row) => row.roomName },
+                    { key: "course", header: "Course", render: (row) => row.courseName },
+                    {
+                      key: "participants",
+                      header: "Participants",
+                      render: (row) =>
+                        row.participants.length > 0 ? (
+                          row.participants.join(", ")
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        ),
+                    },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Participant Issues</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-3 text-sm text-muted-foreground">
+                  Unmet required courses and repeat-placement notes remain participant-specific.
+                </div>
+                <ReadonlyTable
+                  rows={issueRows}
+                  testId="distribution-issues-table"
+                  emptyState="No participant issues."
+                  columns={[
+                    {
+                      key: "participant",
+                      header: "Participant",
+                      render: (row) => row.participantName,
+                    },
+                    {
+                      key: "missingRequired",
+                      header: "Missing required",
+                      render: (row) =>
+                        row.missingRequired || <span className="text-muted-foreground">—</span>,
+                    },
+                    {
+                      key: "notes",
+                      header: "Notes",
+                      render: (row) =>
+                        row.notes || <span className="text-muted-foreground">—</span>,
+                    },
+                  ]}
+                />
+              </CardContent>
+            </Card>
+          </>
         )}
       </main>
     </div>
